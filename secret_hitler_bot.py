@@ -19,7 +19,13 @@ logger = logging.getLogger(__name__)
 
 
 # Setup Telegram Bot
-TOKEN = ""
+try:
+	with open("TOKEN") as f:
+		TOKEN = f.readline()
+
+except Exception:
+     logger.critical('TOKEN not found')
+     #continue if file not found
 
 game = shgame.Game()
 
