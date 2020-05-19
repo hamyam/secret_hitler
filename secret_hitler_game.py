@@ -43,7 +43,6 @@ class Player:
 	def is_dead(self, value):
 		self._is_dead = value
 	
-
 class Game:
 	"""docstring for Game"""
 	def __init__(self):
@@ -60,6 +59,12 @@ class Game:
 		self._discarded_cards = []
 		# active policies
 		self.policies = []
+		self._votes = []
+		# the active president and chancellor
+		self._president = None  # holds Player Object
+		self._chancellor = None # holds Player Object
+		self._candidate = None # holds Player Object
+		self._failed_elections = 0
 
 	@property
 	def active_hand(self):
@@ -85,11 +90,50 @@ class Game:
 	def round(self, round):
 		self._round = round
 
+	@property
+	def votes(self):
+		return self._votes
+	
+	@votes.setter
+	def votes(self, value):
+		self._votes = value	
+
+	@property
+	def president(self):
+		return self._president
+	
+	@president.setter
+	def president(self, value):
+		self._president = value
+
+	@property
+	def chancellor(self):
+		return self._chancellor
+	
+	@chancellor.setter
+	def chancellor(self, value):
+		self._chancellor = value
+
+	@property
+	def candidate(self):
+		return self._candidate
+	
+	@candidate.setter
+	def candidate(self, value):
+		self._candidate = value
+
+	@property
+	def failed_elections(self):
+		return self._failed_elections
+	
+	@failed_elections.setter
+	def failed_elections(self, value):
+		self._failed_elections = value
 
 	def add_player(self, name, uid, uname):
 		# Spieler Obj zur Liste aller Spieler hinzufügen
 		for existing_player in self.players:
-			if existing_player.name == name:
+			if existing_player.uid == uid:
 				print("Spieler mit Namen {} bereits vorhanden.".format(existing_player.name))	
 				return False
 
@@ -118,6 +162,9 @@ class Game:
 			# shuffle playerlist once
 			random.shuffle(self.players)
 			
+			# select random president
+			self.president = self.players[random.randint(numliberals, self.numplayers-1)]
+
 			# assing liberals to first players in list
 			for i in range(numliberals):
 				self.players[i].faction = "Liberal"
@@ -145,6 +192,8 @@ class Game:
 		self.numplayers = 0
 		self.round = 0
 		self.is_setup = False
+		self.policies = []
+		self.discarded_cards = []
 		return True
 
 	def shuffle(self):	
@@ -192,6 +241,11 @@ class Game:
 
 		return num_policies
 
+	def vote(self, name, vote):
+		# stores the players votes
+		self.votes.append([name, vote])
+		return True
+		
 def main():
 	game = Game()
 	print(game.deck)
