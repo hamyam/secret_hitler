@@ -236,10 +236,8 @@ def contact_chancellor(update, context):
 						 one_time_keyboard=True)
 
 
-		if update.message.from_user.id == game.president.id:
+		if update.message.from_user.id == game.president.uid:
 			return ConversationHandler.END
-
-		return LAW
 
 	else:
 		ConversationHandler.END
@@ -247,42 +245,45 @@ def contact_chancellor(update, context):
 def pass_law(update, context):
 	global GOT_FORCED
 
-	# passes law
-	law = update.message.text
-	logger.info("ausgewählt: {}".format(law))
+	if update.message.from_user.id == game.chancellor.uid:
+		# passes law
+		law = update.message.text
+		logger.info("ausgewählt: {}".format(law))
 
-	# pass law
-	game.policies.append(law)
-	game.round += 1
+		# pass law
+		game.policies.append(law)
+		game.round += 1
 
-	# add discarded to discarded pile
-	if game.active_hand[0] == law:
-		# if first law is correct: 
-		game.discarded_cards.append(game.active_hand[1])
+		# add discarded to discarded pile
+		if game.active_hand[0] == law:
+			# if first law is correct: 
+			game.discarded_cards.append(game.active_hand[1])
+		else:
+			game.discarded_cards.append(game.active_hand[0])
+		
+		# empty hand
+		game.active_hand = []
+		GOT_FORCED = False
+		# Rueckmeldung geben
+		update.message.reply_text(text="{} verabschiedet".format(law), reply_markup=ReplyKeyboardMarkup(GAMEKEYBOARD))
+
+		# allen Spielern Bescheid sagen
+		for player in game.players:
+			if player.uid > 0:
+				context.bot.send_message(chat_id=player.uid, text="{} wurde von {} erlassen".format(law, update.message.from_user.first_name))
+
+		# check wincondition
+		if game.count_liberal_policies() == 5:
+			win_announcement(context, 'Liberal', '5 liberale Gesetze wurden erlassen!')
+
+		if game.count_facist_policies() == 6:
+			win_announcement(context, 'Facist', '6 faschistische Gesetze wurden erlassen!')
+
+		check_policies(context)
+		logger.info("pass law schleife ends")
+
 	else:
-		game.discarded_cards.append(game.active_hand[0])
-	
-	# empty hand
-	game.active_hand = []
-	GOT_FORCED = False
-	# Rueckmeldung geben
-	update.message.reply_text(text="{} verabschiedet".format(law), reply_markup=ReplyKeyboardMarkup(GAMEKEYBOARD))
-
-	# allen Spielern Bescheid sagen
-	for player in game.players:
-		if player.uid > 0:
-			context.bot.send_message(chat_id=player.uid, text="{} wurde von {} erlassen".format(law, update.message.from_user.first_name))
-
-	# check wincondition
-	if game.count_liberal_policies() == 5:
-		win_announcement(context, 'Liberal', '5 liberale Gesetze wurden erlassen!')
-
-	if game.count_facist_policies() == 6:
-		win_announcement(context, 'Facist', '6 faschistische Gesetze wurden erlassen!')
-
-	check_policies(context)
-	logger.info("pass law schleife ends")
-	return ConversationHandler.END
+		update.message.reply_text('Nur der Kanzler kann Gesetze erlassen.')
 
 def next_round(update, context):
 	if update.message.from_user.id == game.president.uid:
@@ -310,13 +311,14 @@ def next_round(update, context):
 			broadcast(context, "Konnte keinen neuen Präsident wählen.")
 
 		# inform him about his powers
-
-		context.bot.send_message(chat_id=game.president.uid, 
-								text="Du bist neuer Präsident.\nStarte die Runde mit /wahl\nDanach kannst du drei Gesetze /ziehen\nFalls du durch die Gesetzgebung eine spezielle Aktion durchführen drafst, schau in /president_powers nach.\nBeende die Runde mit /next_round",
-								reply_markup=ReplyKeyboardMarkup(PRESIDENT_KEYBOARD))
+		if game.president.uid > 0:
+			context.bot.send_message(chat_id=game.president.uid, 
+									text="Du bist neuer Präsident.\nStarte die Runde mit /wahl\nDanach kannst du drei Gesetze /ziehen\nFalls du durch die Gesetzgebung eine spezielle Aktion durchführen drafst, schau in /president_powers nach.\nBeende die Runde mit /next_round",
+									reply_markup=ReplyKeyboardMarkup(PRESIDENT_KEYBOARD))
 
 		# tell everyone whos the new president and that the round has endet
 		text = "Runde {} ist zu Ende. {} ist neuer Präsident".format(game.round, game.president.name)
+		broadcast(context, text)
 
 	else:
 		update.message.reply_text('Nur der Präsident kann die Runde beenden.')
@@ -326,15 +328,17 @@ def force_law(update, context):
 	global GOT_FORCED
 
 	if game.is_setup and len(game.active_hand) == 0:
-		game.draw(1)
-		policy = game.active_hand.pop()
-		game.policies.append(policy)
+		if not game.chancellor:
+			game.draw(1)
+			policy = game.active_hand.pop()
+			game.policies.append(policy)
 
-		text = '{} wurde gezwungenermaßen erlassen. Die Sonderregeln sind nicht aktiv.'.format(policy)
-		broadcast(context, text)
-		GOT_FORCED = True
-		check_policies(context)
-
+			text = '{} wurde gezwungenermaßen erlassen. Die Sonderregeln sind nicht aktiv.'.format(policy)
+			broadcast(context, text)
+			GOT_FORCED = True
+			check_policies(context)
+		else:
+			update.message.reply_text('Es gibt einen aktiven Kanzler!')
 	else:
 		update.message.reply_text('du kannst jetzt kein Gesetz erzwingen')
 
@@ -377,7 +381,7 @@ def show_top_3(update, context):
 		top_cards = []
 		for i in range(3):
 			top_cards.append(game.deck[-i])
-		update.message.reply_text("Top drei Karten sind {}".format(' '.join(top_cards)))
+		update.message.reply_text("Top drei Karten sind: [{}]".format('] ['.join(top_cards)))
 		PEEK_BOOL = False
 	else:
 		update.message.reply_text("Es müssen weniger als sieben Spieler und genau 3 faschistische Gesetze verabschiedet sein.\n/show_player  /gesetze")
@@ -483,6 +487,8 @@ def helpme(update, context):
 
 def reset(update, context):
 	# resets the game
+	global VOTING_BOOL
+	VOTING_BOOL = False
 	game.reset()
 	update.message.reply_text("Spiel zurückgesetzt.")
 
@@ -533,22 +539,26 @@ def select_candidate(update, context):
 	# only start voting if there is not active voting already
 	global VOTING_BOOL
 
-	if (update.message.from_user.id == game.president.uid) and not VOTING_BOOL:
-		game.votes=[]
+	if not game.chancellor:
+		if (update.message.from_user.id == game.president.uid) and not VOTING_BOOL:
+			game.votes=[]
 
-		list_of_players = [[player.name] for player in game.players if player.uid != update.message.from_user.id]
-		
-		# returns the vote to the counting method
-		update.message.reply_text('Wähle deinen Kanzlerkandidaten', reply_markup=ReplyKeyboardMarkup(list_of_players))
-		# set the 'voting is active' flag
-		VOTING_BOOL = True
+			list_of_players = [[player.name] for player in game.players if player.uid != update.message.from_user.id]
+			
+			# returns the vote to the counting method
+			update.message.reply_text('Wähle deinen Kanzlerkandidaten', reply_markup=ReplyKeyboardMarkup(list_of_players))
+			# set the 'voting is active' flag
+			VOTING_BOOL = True
 
-		# returns the chosen candidate to the vote method to start the vote Convo
-		return CANDIDATE
+			# returns the chosen candidate to the vote method to start the vote Convo
+			return CANDIDATE
 
-	else:
-		update.message.reply_text('Nur der Präsident kann die Abstimmung starten.')
+		else:
+			update.message.reply_text('Nur der Präsident kann die Abstimmung starten.')
+			return ConversationHandler.END
 
+	else: 
+		update.message.reply_text('Es wurde bereit {} zum Kanzler gewählt.'.format(game.chancellor.name))
 		return ConversationHandler.END
 
 def start_election(update, context):
@@ -638,7 +648,7 @@ def vote(update, context):
 			if player.uid > 0:
 				if player.uid == game.president.uid:
 					context.bot.send_message(chat_id=player.uid, 
-											text=result,
+											text=(result + '\nZiehe jetzt drei Karten /ziehen'),
 											reply_markup=ReplyKeyboardMarkup(PRESIDENT_KEYBOARD),
 											one_time_keyboard=True)
 				else:
@@ -721,17 +731,17 @@ def main():
 
 		)
 
-	pass_law_handler = ConversationHandler(
-		entry_points=[MessageHandler(Filters.regex('^(Facist|Liberal)$'), contact_chancellor)],
+	# select_law_handler = ConversationHandler(
+	# 	entry_points=[MessageHandler(Filters.regex('^(Facist|Liberal)$'), contact_chancellor)],
 
-		states = {
-			LAW: [MessageHandler(Filters.regex('^(Facist|Liberal)$'), pass_law)], 
+	# 	states = {
+	# 		LAW: [MessageHandler(Filters.regex('^(Facist|Liberal)$'), pass_law)], 
 
-			},
+	# 		},
 
-		fallbacks=[CommandHandler('cancel', cancel)]
+	# 	fallbacks=[CommandHandler('cancel', cancel)]
 
-		)
+	# 	)
 
 	loyalty_handler = ConversationHandler(
 		entry_points=[CommandHandler('loyalty', check_loyalty)],
@@ -765,13 +775,15 @@ def main():
 
 	vote_handler = MessageHandler(Filters.regex('^(Ja!|Nein!)$'), vote)
 
+	pass_law_handler = MessageHandler(Filters.regex('^(Liberal|Facist)$'), pass_law)
 
 	dp.add_handler(draw_handler)
-	dp.add_handler(pass_law_handler)
+	# dp.add_handler(select_law_handler)
 	dp.add_handler(loyalty_handler)
 	dp.add_handler(kill_handler)
 	dp.add_handler(start_election_handler)
 	dp.add_handler(vote_handler)
+	dp.add_handler(pass_law_handler)
 
 	# Handler fuer die verschiedenen Methoden erschaffen
 	commands = [
